@@ -21,7 +21,7 @@ SECTION	"Timer_Overflow",HOME[$0050]
 SECTION	"Serial",HOME[$0058]
 	reti
 SECTION	"p1thru4",HOME[$0060]
-	jp joypad_interrupt
+	reti
 
 SECTION "variables",BSS
 variables_start:
@@ -30,11 +30,14 @@ GameState:		ds 1		; a variable to hold the current state of the game
 GameStateAscii:		ds 1		; the ascii version of GameState
 
 SnakeLength:		ds 1		; the length of the snake
-SnakePieces:		ds 2*30		; snake blocks; 2 bytes per piece (x and y coords), 30 pieces max 
+
+SnakePieces:		ds 2*30		; snake blocks; 2 bytes per piece (x and y coords), 30 pieces max
+SnakePiecesEnd:
+
 SnakeHead:		ds 2		; snake head pointer
 SnakeTail:		ds 2		; snake tail pointer
 
-;SnakeDirection:		ds 1		; 00 -> up, 01 -> right, 02-> down, 03 -> left
+SnakeDirection:		ds 1		; 00 -> up, 01 -> right, 02-> down, 03 -> left
 SnakeNextDirection:	ds 1		; allows us to change the direction of the snake while it is not moving
 
 SnakeShouldGrow:	ds 1		; should the snake grow ?
@@ -213,7 +216,7 @@ init_snake:
 	ld a, TACF_START | TACF_4KHZ	; turn on, set to 4khz (timer will interrupt every [255 * 1/4000] = 63.75ms)
 	ld [rTAC], a
 
-	ld a, IEF_VBLANK | IEF_TIMER	; enable vblank and timer interrupts
+	ld a, IEF_VBLANK | IEF_TIMER | IEF_HILO	; enable vblank, timer, joypad interrupts
 	ld [rIE], a			; save the register
 	
 	; draw our initial snake
@@ -228,6 +231,8 @@ main:
 	ld a, [GameState]
 	cp 2				; does GameState == 2? (the gameover state)
 	jr z, gameover			; show a nice message
+
+	call read_joypad		; read the joypad in for movement
 
 	ld a, [SnakeShouldMove]
 	or a				; is a 0 ?
@@ -249,6 +254,134 @@ gameover:
 ;	jr main
 
 ;------------------------------------------------------------------------
+
+;--------------- 
+; timer_interrupt
+;	handles the timer overflow interrupt
+;---------------
+timer_interrupt:
+	push af				; save af so we can use it
+	; we want to only move the snake every 8 interrupts (~ half a second)
+	ld a, [TimerTicks]		; load our tick number in
+	cp a, 8				; is a == 8 ?
+	jr z, timer_interrupt_equal	; if they are the same, jump
+
+	; or if they aren't the same
+	inc a				; increment and save TimerTicks
+	ld [TimerTicks], a
+	jp timer_interrupt_end
+	
+timer_interrupt_equal:
+	; first let's reset the ticker
+	ld a, 0
+	ld [TimerTicks], a
+
+	; and tell our main loop that the snake should move
+	ld a, 1
+	ld [SnakeShouldMove], a
+	
+timer_interrupt_end:
+	pop af				; restore af
+	reti				; interrupt escape
+
+;------------------------------------------------------------------------
+
+;--------------- 
+; read_joypad
+;	reads the keys from the joypad into a (ll. 999-1072)
+;---------------
+read_joypad:
+	push bc
+	ld a, P1F_5			; select the joypad
+	ld [rP1], a			; save it into the register
+
+	ld a, [rP1]			; read the keypress register in
+	ld a, [rP1]			; apparently you are supposed to do this a bunch of times to allow for the hardware
+	ld a, [rP1]
+	ld a, [rP1]
+	ld a, [rP1]
+	ld a, [rP1]
+	
+	cpl				; invert all the bits
+	ld b, a				; backup our read value into b
+	
+	; test for the right key
+	and $01				; cut out all the bits except the one we want
+	cp $01				; and see if ours is left over
+	jr z, read_joypad_right		; if it is, the button has been pressed
+read_joypad_right_return:		; need to jump back so we can detect all key presses (ie up and right, etc)
+
+	; test for the left key
+	ld a, b
+	and $02
+	cp $02
+	jr z, read_joypad_left
+read_joypad_left_return:
+
+	; test for up key
+	ld a, b
+	and $04
+	cp $04
+	jr z, read_joypad_up
+read_joypad_up_return:
+
+	; test for down key
+	ld a, b
+	and $08
+	cp $08
+	jr z, read_joypad_down
+read_joypad_down_return:
+	
+	pop bc
+	;jp read_joypad_end		; we are done here!
+	ret				; all done
+
+	; the major problem here is that we don't want the snake to be able to move back in on itself.
+	; we need to test against SnakeDirection to make sure that this won't happen
+read_joypad_up:
+	ld a, [SnakeDirection]
+	
+	cp a, 2				; is the snake moving down?
+	jr z, read_joypad_up_return	; if it is, we don't update the direction
+
+	; but if it isn't, write the new direction in
+	ld a, 0				; up = 0
+	ld [SnakeNextDirection], a	; write it!
+
+	jp read_joypad_up_return	; we are done here!
+	
+read_joypad_right:			; these follow the same format as above, see the comments there for explanations
+	ld a, [SnakeDirection]
+
+	cp a, 3				; is the snake moving left?
+	jr z, read_joypad_right_return
+	
+	ld a, 1				; right = 1
+	ld [SnakeNextDirection], a
+
+	jp read_joypad_right_return
+
+read_joypad_down:
+	ld a, [SnakeDirection]
+
+	cp a, 0				; is the snake moving up?
+	jr z, read_joypad_down_return
+	
+	ld a, 2				; down = 3
+	ld [SnakeNextDirection], a
+
+	jp read_joypad_down_return
+
+read_joypad_left:
+	ld a, [SnakeDirection]
+
+	cp a, 1				; is the snake moving left?
+	jr z, read_joypad_left_return
+	
+	ld a, 3				; right = 1
+	ld [SnakeNextDirection], a
+
+	jp read_joypad_left_return
 
 ;--------------- 
 ; draw_gameover
@@ -277,6 +410,10 @@ draw_gameover:
 ;---------------
 move_snake:
 	di				; we don't want any joypad or timer interrupts going off during this
+	
+	; first let's update SnakeDirection
+	ld a, [SnakeNextDirection]
+	ld [SnakeDirection], a
 
 	LOAD_16_INTO_HL SnakeHead	; put the pointer to SnakeHead into hl
 
@@ -316,7 +453,7 @@ move_snake_right:
 	inc d
 
 	ld a, d				; put d into a so we can compare with it
-	cp 21				; is the coord 21 ?
+	cp 20				; is the coord 20 ?
 	jr z, move_snake_die		; if it is, snake is dead!
 	
 	jp move_snake_write
@@ -393,45 +530,6 @@ move_snake_die:
 move_snake_end:
 	ei				; turn interrupts back on
 	ret
-
-;--------------- 
-; joypad_interrupt
-;	handles the joypad interrupt
-;---------------
-joypad_interrupt:
-	push af
-
-	pop af
-	reti
-
-;--------------- 
-; timer_interrupt
-;	handles the timer overflow interrupt
-;---------------
-timer_interrupt:
-	push af				; save af so we can use it
-	; we want to only move the snake every 8 interrupts (~ half a second)
-	ld a, [TimerTicks]		; load our tick number in
-	cp a, 8				; is a == 8 ?
-	jr z, timer_interrupt_equal	; if they are the same, jump
-
-	; or if they aren't the same
-	inc a
-	ld [TimerTicks], a
-	jp timer_interrupt_end
-	
-timer_interrupt_equal:
-	; first let's reset the ticker
-	ld a, 0
-	ld [TimerTicks], a
-
-	; and tell our main loop that the snake should move
-	ld a, 1
-	ld [SnakeShouldMove], a
-	
-timer_interrupt_end:
-	pop af				; restore af
-	reti				; interrupt escape
 
 ;--------------- 
 ; draw_snake

@@ -4,50 +4,56 @@ Bank #0 (HOME):
   SECTION: $0050-$0052 ($0003 bytes)
   SECTION: $0058-$0058 ($0001 bytes)
   SECTION: $0060-$0060 ($0001 bytes)
-  SECTION: $0100-$0C15 ($0B16 bytes)
-           $0AE3 = timer_interrupt
+  SECTION: $0100-$0C8A ($0B8B bytes)
+           $0A2B = timer_interrupt
            $0952 = init
-           $0BFD = setup_dma
-           $0BDC = stoplcd
+           $0C72 = setup_dma
+           $0C51 = stoplcd
            $0150 = TileData
-           $0B40 = clear_bg
-           $0B52 = splash_text
-           $0BD2 = splash_text_end
-           $0AFE = draw_snake
-           $0A3B = move_snake
+           $0BB5 = clear_bg
+           $0BC7 = splash_text
+           $0C47 = splash_text_end
+           $0B73 = draw_snake
+           $0A46 = read_joypad
+           $0AC5 = move_snake
            $0A06 = main
-           $0A28 = draw_gameover
-           $0BD2 = gameover_text
-           $0BDC = gameover_text_end
-           $0A81 = move_snake_write
-           $0AE1 = move_snake_end
-           $0B30 = convert_xy_to_screen_addr
-           $0AFC = timer_interrupt_end
-           $0BED = multiply_to_hl
-           $0C0A = dma_copy
-           $0C16 = dma_copy_end
+           $0AB2 = draw_gameover
+           $0A44 = timer_interrupt_end
+           $0A6D = read_joypad_up_return
+           $0A5F = read_joypad_right_return
+           $0A74 = read_joypad_down_return
+           $0A66 = read_joypad_left_return
+           $0C47 = gameover_text
+           $0C51 = gameover_text_end
+           $0B11 = move_snake_write
+           $0B71 = move_snake_end
+           $0BA5 = convert_xy_to_screen_addr
+           $0C62 = multiply_to_hl
+           $0C7F = dma_copy
+           $0C8B = dma_copy_end
   SECTION: $0061-$00B6 ($0056 bytes)
            $007B = mem_CopyMono
            $0061 = mem_Set
            $00A1 = mem_CopyVRAM
            $008B = mem_SetVRAM
            $006D = mem_Copy
-    SLACK: $348B bytes
+    SLACK: $3416 bytes
 
 BSS:
-  SECTION: $C000-$C0EC ($00ED bytes)
+  SECTION: $C000-$C0ED ($00EE bytes)
            $C000 = variables_start
-           $C0ED = variables_end
+           $C0EE = variables_end
            $C0A0 = GameState
            $C0A3 = SnakePieces
            $C0E1 = SnakeTail
            $C0DF = SnakeHead
            $C0A2 = SnakeLength
-           $C0E5 = SnakeShouldMove
-           $C0E3 = SnakeNextDirection
-           $C0E4 = SnakeShouldGrow
-           $C0E7 = TimerTicks
-    SLACK: $1F13 bytes
+           $C0E6 = SnakeShouldMove
+           $C0E8 = TimerTicks
+           $C0E3 = SnakeDirection
+           $C0E4 = SnakeNextDirection
+           $C0E5 = SnakeShouldGrow
+    SLACK: $1F12 bytes
 
 VRAM:
   EMPTY
