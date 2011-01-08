@@ -1,0 +1,45 @@
+Bank #0 (HOME):
+  SECTION: $0040-$0042 ($0003 bytes)
+  SECTION: $0048-$0048 ($0001 bytes)
+  SECTION: $0050-$0050 ($0001 bytes)
+  SECTION: $0058-$0058 ($0001 bytes)
+  SECTION: $0060-$0060 ($0001 bytes)
+  SECTION: $0100-$0B16 ($0A17 bytes)
+           $0952 = init
+           $0AFE = setup_dma
+           $0ADD = stoplcd
+           $0150 = TileData
+           $0A40 = clear_bg
+           $0A52 = splash_text
+           $0AD2 = splash_text_end
+           $09FA = sleep
+           $0A00 = draw_snake
+           $0A30 = convert_xy_to_screen_addr
+           $0AEE = multiply_to_hl
+           $0B0B = dma_copy
+           $0B17 = dma_copy_end
+  SECTION: $0061-$00B6 ($0056 bytes)
+           $007B = mem_CopyMono
+           $0061 = mem_Set
+           $00A1 = mem_CopyVRAM
+           $008B = mem_SetVRAM
+           $006D = mem_Copy
+    SLACK: $358C bytes
+
+BSS:
+  SECTION: $C000-$C0E9 ($00EA bytes)
+           $C000 = variables_start
+           $C0EA = variables_end
+           $C0A0 = GameState
+           $C0A3 = SnakePieces
+           $C0E1 = SnakeTail
+           $C0DF = SnakeHead
+           $C0A2 = SnakeLength
+    SLACK: $1F16 bytes
+
+VRAM:
+  EMPTY
+
+HRAM:
+  EMPTY
+
