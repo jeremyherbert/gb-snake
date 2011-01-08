@@ -69,12 +69,12 @@ init:
 	nop				; everyone seems to put a nop here, who am I to be any different
 	di				; disable interrupts since we aren't using them
 
-; first up, we need to init the DMA code
-;
-; Why are we using DMA? (and what the hell is it?) (ll. 1639-1689)
-;	DMA allows very fast and easy copying of data into the OAM (object attribute memory). The reason we don't just dump our data straight into the OAM memory is because  
-;	if it is currently being read by other parts of the gb then we will do an invalid write and things will break. The DMA code (which we are going to load into HRAM) 
-;	will only run when the memory is not busy. Also, the reason we need to put our code in HRAM (high ram) is because the lower parts of memory are not accessible during a DMA write.
+	; first up, we need to init the DMA code
+	;
+	; Why are we using DMA? (and what the hell is it?) (ll. 1639-1689)
+	;	DMA allows very fast and easy copying of data into the OAM (object attribute memory). The reason we don't just dump our data straight into the OAM memory is because  
+	;	if it is currently being read by other parts of the gb then we will do an invalid write and things will break. The DMA code (which we are going to load into HRAM) 
+	;	will only run when the memory is not busy. Also, the reason we need to put our code in HRAM (high ram) is because the lower parts of memory are not accessible during a DMA write.
 	call setup_dma
 
 	ld sp, $FFFF			; set the stack pointer to RAMEND, the stack will grow toward $0
@@ -82,48 +82,48 @@ init:
 	ld a, %11100100			; load the palette we want to use into a. 11 (darkest), 10 (high-mid dark), 01 (low-mid dark), 00 (light); (ll. 1692-1704)
 	ld [rBGP], a			; set it as the background palette 
 
-; there are only two sprite palettes on the gameboy (0 and 1), we are going to set both to our standard palette
+	; there are only two sprite palettes on the gameboy (0 and 1), we are going to set both to our standard palette
 	ldh [rOBP0], a			; set it as the palette for the first sprite palette
 	ldh [rOBP1], a			; (ll. 1706-1720)
 
-; now we set the background scroll position registers to zero
+	; now we set the background scroll position registers to zero
 	ld a, 0		
 	ld [rSCX], a
 	ld [rSCY], a
 
-; we can't do anything (well, shouldn't) while the LCD is still updating, so first we turn it off
+	; we can't do anything (well, shouldn't) while the LCD is still updating, so first we turn it off
 	call stoplcd
 
-; now that the LCD isn't updating, we copy our ascii tileset into vram
-; using: mem_CopyMono (hl->pSource, de->pDest, bc->bytecount)
+	; now that the LCD isn't updating, we copy our ascii tileset into vram
+	; using: mem_CopyMono (hl->pSource, de->pDest, bc->bytecount)
 	ld hl, TileData 		; this is the label we set earlier
 	ld de, _VRAM			; send to vram
 	ld bc, 256*8			; 256 chars, 8 bytes a piece
 	call mem_CopyMono
 
-; clear out the object attribute memory (OAM)
-; using: mem_Set (a->val, hl->pMem, bc->byte count)
+	; clear out the object attribute memory (OAM)
+	; using: mem_Set (a->val, hl->pMem, bc->byte count)
 	ld a, 0
 	ld hl, _RAM			; start of ram
 	ld bc, $A0			; the full size of the OAM area: 40 bytes, 4 bytes per sprite
 	call mem_Set
 
-; turn the LCD back on (ll. 1505-1544, gbhw.inc 70-85)
-; the following flags mean:
-;	LCDCF_ON		-> turn the LCD on
-;	LCDCF_BG8000	-> use the area starting at $8000 for the background tiles (same area as the object data; ie ascii)
-;	LCDCF_BG9800	-> use background 0
-;	LCDCF_OBJ8		-> sprite size (8x8)
-;	LCDCF_OBJON		-> sprite display
-;	LCDCF_BGON		-> background on
+	; turn the LCD back on (ll. 1505-1544, gbhw.inc 70-85)
+	; the following flags mean:
+	;	LCDCF_ON		-> turn the LCD on
+	;	LCDCF_BG8000	-> use the area starting at $8000 for the background tiles (same area as the object data; ie ascii)
+	;	LCDCF_BG9800	-> use background 0
+	;	LCDCF_OBJ8		-> sprite size (8x8)
+	;	LCDCF_OBJON		-> sprite display
+	;	LCDCF_BGON		-> background on
 	ld a, LCDCF_ON | LCDCF_BG8000 | LCDCF_BG9800 | LCDCF_OBJ8 | LCDCF_OBJON | LCDCF_BGON
 	ld [rLCDC], a
 
-; clear the background tiles
+	; clear the background tiles
 	call clear_bg
 
-; when the gameboy starts, the ram is filled with random data. we need to zero this out on all of our variables
-; using: mem_Set (a->val, hl->pMem, bc->byte count)
+	; when the gameboy starts, the ram is filled with random data. we need to zero this out on all of our variables
+	; using: mem_Set (a->val, hl->pMem, bc->byte count)
 init_variables:
 	ld a, 0
 	ld hl, variables_start
@@ -141,12 +141,12 @@ splash:
 	ld bc, splash_text_end-splash_text	; the length of the BSS block, plus an extra 20 because it makes it easier to see in the debugger
 	call mem_CopyVRAM
 
-; now we are getting into actual game code, so let's start the interrupts again
+	; now we are getting into actual game code, so let's start the interrupts again
 	ld a, IEF_VBLANK		; enable the vblank interrupt
 	ld [rIE], a			; store the setting in the register
 	ei				; enable interrupts
 
-; wait until the A button is pressed (using the P1 register)
+	; wait until the A button is pressed (using the P1 register)
 splash_wait_for_press:	
 	ld a, P1F_4			; set bit 5, this means we are selecting the button keys to be read (ll. 999-1072)
 	ld [rP1], a			; write it into the register
@@ -161,28 +161,28 @@ splash_wait_for_press:
 
 ; ok, time to play the game!
 init_game:
-; once the key has been pressed, clear the background tiles
+	; once the key has been pressed, clear the background tiles
 	call clear_bg	
 
-; update the game state
+	; update the game state
 	ld a, 1
 	ld [GameState], a
 
-; draw the initial snake
+	; draw the initial snake
 init_snake:
 	ld hl, SnakePieces		; grab the starting address of our array
 
-; now we load a pointer to the tail of the snake into SnakeTail
+	; now we load a pointer to the tail of the snake into SnakeTail
 	WRITE_16 SnakeTail, SnakePieces
-; and put the head 6 bytes up (2 bytes for x and y coords
+	; and put the head 6 bytes up (2 bytes for x and y coords
 	WRITE_16_WITH_ADD SnakeHead, SnakePieces, 3*2
 
 	ld a, 3
 	ld [SnakeLength], a		; set the initial snake length
 
-; now we need to set the x,y bytes for the three snake pieces we have just created
-; we are going to put them at (9,8), (9,10) and (9,11) 
-; we could do this with mem_Set and db, but I think this better demonstrates how to load stuff into memory
+	; now we need to set the x,y bytes for the three snake pieces we have just created
+	; we are going to put them at (9,8), (9,10) and (9,11) 
+	; we could do this with mem_Set and db, but I think this better demonstrates how to load stuff into memory
 	ld a, [SnakeTail]		; put the address to start writing in hl 
 	ld l, a
 	ld a, [SnakeTail+1]
@@ -206,9 +206,17 @@ init_snake:
 	ld a, 10			; piece 2, y
 	ld [hl+], a
 
+	; now we start the timer interrupts (ll. 828-852)
+	ld a, TACF_START | TACF_4KHZ	; turn on, set to 4khz (timer will interrupt every (255 * 1/4000) ~= 63.75ms
+	ld [rTAC], a
+
+	ld a, IEF_VBLANK | IEF_TIMER	; enable vblank and timer interrupts
+	ld [rIE], a			; save the register
+
 ; finally, our main code loop!
 main:
-	nop
+;	halt				; sleep the cpu until an interrupt fires
+;	nop				; a bug in the cpu means that the instruction after a halt might get skipped
 	call draw_snake
 	jr main
 
@@ -218,7 +226,29 @@ main:
 ; timer_interrupt
 ;	handles the timer overflow interrupt
 ;---------------
+timer_interrupt:
+	push af				; save af so we can use it
+	; we want to only move the snake every 8 interrupts (~ half a second)
+	ld a, [TimerTicks]		; load our tick number in
+	cp a, 8				; is a == 8 ?
+	jr z, timer_interrupt_equal	; if they are the same, jump
+
+	; or if they aren't the same
+	inc a
+	ld [TimerTicks], a
+	jp timer_interrupt_end
 	
+timer_interrupt_equal:
+	; first let's reset the ticker
+	ld a, 0
+	ld [TimerTicks], a
+
+	; and tell our main loop that the snake should move
+	ld a, 1
+	ld [SnakeShouldMove], a
+	
+timer_interrupt_end:
+	pop af				; restore af
 	reti				; interrupt escape
 
 ;--------------- 
