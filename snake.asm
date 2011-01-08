@@ -21,7 +21,7 @@ SECTION	"Timer_Overflow",HOME[$0050]
 SECTION	"Serial",HOME[$0058]
 	reti
 SECTION	"p1thru4",HOME[$0060]
-	reti
+	jp joypad_interrupt
 
 SECTION "variables",BSS
 variables_start:
@@ -33,8 +33,11 @@ SnakeLength:		ds 1		; the length of the snake
 SnakePieces:		ds 2*30		; snake blocks; 2 bytes per piece (x and y coords), 30 pieces max 
 SnakeHead:		ds 2		; snake head pointer
 SnakeTail:		ds 2		; snake tail pointer
-SnakeDirection:		ds 1		; 00 -> up, 01 -> right, 02-> down, 03 -> left
 
+;SnakeDirection:		ds 1		; 00 -> up, 01 -> right, 02-> down, 03 -> left
+SnakeNextDirection:	ds 1		; allows us to change the direction of the snake while it is not moving
+
+SnakeShouldGrow:	ds 1		; should the snake grow ?
 SnakeShouldMove:	ds 1		; triggered by the timer, allows for movement in the main code loop
 
 NumberOfFoods:		ds 1		; number of food objects that exist (as sprites)
@@ -174,8 +177,8 @@ init_snake:
 
 	; now we load a pointer to the tail of the snake into SnakeTail
 	WRITE_16 SnakeTail, SnakePieces
-	; and put the head 6 bytes up (2 bytes for x and y coords
-	WRITE_16_WITH_ADD SnakeHead, SnakePieces, 3*2
+	; and put the head 4 bytes up (2 bytes for x and y coords)
+	WRITE_16_WITH_ADD SnakeHead, SnakePieces, 2*2
 
 	ld a, 3
 	ld [SnakeLength], a		; set the initial snake length
@@ -191,7 +194,7 @@ init_snake:
 	ld a, 9				; piece 0, x
 	ld [hl+], a			; load it in to memory at hl (which is SnakeTail) and then increment hl
 
-	ld a, 8
+	ld a, 10
 	ld [hl+], a			; piece 0, y is also 8
 
 	ld a, 9
@@ -203,24 +206,203 @@ init_snake:
 	ld a, 9				; piece 2, x
 	ld [hl+], a
 
-	ld a, 10			; piece 2, y
+	ld a, 8				; piece 2, y
 	ld [hl+], a
 
 	; now we start the timer interrupts (ll. 828-852)
-	ld a, TACF_START | TACF_4KHZ	; turn on, set to 4khz (timer will interrupt every (255 * 1/4000) ~= 63.75ms
+	ld a, TACF_START | TACF_4KHZ	; turn on, set to 4khz (timer will interrupt every [255 * 1/4000] = 63.75ms)
 	ld [rTAC], a
 
 	ld a, IEF_VBLANK | IEF_TIMER	; enable vblank and timer interrupts
 	ld [rIE], a			; save the register
+	
+	; draw our initial snake
+	call draw_snake
 
 ; finally, our main code loop!
 main:
 ;	halt				; sleep the cpu until an interrupt fires
 ;	nop				; a bug in the cpu means that the instruction after a halt might get skipped
+	ei
+
+	ld a, [GameState]
+	cp 2				; does GameState == 2? (the gameover state)
+	jr z, gameover			; show a nice message
+
+	ld a, [SnakeShouldMove]
+	or a				; is a 0 ?
+	jr z, main			; if it is, skip the move
+	
+	; but if it isn't
+	ld a, 0				; to reset SnakeShouldMove
+	ld [SnakeShouldMove], a		; save it
+	
+	call move_snake			; move the snake!
 	call draw_snake
-	jr main
+
+	jp main				; loop
+
+gameover:
+	call draw_gameover
+	jp main
+
+;	jr main
 
 ;------------------------------------------------------------------------
+
+;--------------- 
+; draw_gameover
+;	draws the gameover message
+;---------------
+draw_gameover:
+	push af
+	push hl
+	push de
+
+	; time to copy our gameover tiles to the screen
+	; using: mem_CopyVRAM (hl->pSource, de->pDest, bc->byte count)
+	ld hl, gameover_text
+	ld de, _SCRN0+SCRN_VY_B*8+5 ; 3 lines down, 4 along
+	ld bc, gameover_text_end-gameover_text
+	call mem_CopyVRAM
+
+	pop de
+	pop hl
+	pop af
+	ret
+	
+;--------------- 
+; move_snake
+;	moves the snake one step forward by SnakeNextDirection (and grows if SnakeShouldGrow is set)
+;---------------
+move_snake:
+	di				; we don't want any joypad or timer interrupts going off during this
+
+	LOAD_16_INTO_HL SnakeHead	; put the pointer to SnakeHead into hl
+
+	ld a, [hl+]			; grab the x coord
+	ld d, a
+
+	ld a, [hl+]			; and now grab the y coord
+	ld e, a
+
+	ld a, [SnakeNextDirection]
+	
+	cp 0				; compare a with 0
+	jr z, move_snake_up		; if they are the same, we want to move the snake upwards
+	
+	cp 1				; these are all the same as above but with different jump targets
+	jr z, move_snake_right		; this is equivalent to a C switch() statement
+
+	cp 2
+	jr z, move_snake_down
+
+	cp 3
+	jr z, move_snake_left
+
+	
+move_snake_up:
+	; we are moving up, so decrement the y coord
+	dec e
+
+	ld a, e
+	cp 255				; if the register overflowed
+	jr z, move_snake_die		; snake is dead!
+
+	jp move_snake_write		; otherwise write our new snake block
+
+move_snake_right:
+	; we are moving right, so increment the x coord
+	inc d
+
+	ld a, d				; put d into a so we can compare with it
+	cp 21				; is the coord 21 ?
+	jr z, move_snake_die		; if it is, snake is dead!
+	
+	jp move_snake_write
+
+move_snake_down:
+	; we are moving down, so increment the y coord
+	inc e
+
+	ld a, e				; put e into a so we can compare
+	cp 18				; is the y coord 18
+	jr z, move_snake_die		; if it is, snake is dead!
+
+	jp move_snake_write
+
+move_snake_left:
+	; we are moving left, so decrement the x coord
+	dec d
+	
+	ld a, d
+	cp 255				; did we get an overflow ?
+	jr z, move_snake_die		; we are off the screen, so die
+	jp move_snake_write
+
+move_snake_write:
+	; d and e have been updated with our new values, so lets put them in memory
+	ld a, d
+	ld [hl+], a
+	
+	ld a, e
+	ld [hl+], a
+
+	; we have moved the head up two blocks, so we need to update the pointer
+	LOAD_16_INTO_HL SnakeHead
+	ld de, 2			; we need to use de so the cpu will handle the 16 bit add for us
+	add hl, de			; add two bytes on
+	WRITE_16_WITH_HL SnakeHead
+
+	; now we need to test if the snake should grow
+	ld a, [SnakeShouldGrow]
+	cp 0				; should the snake stay the same length?
+	jr z, move_snake_cut_tail	; if SnakeShouldGrow == 0, don't grow
+
+	; if we get here, the snake needs to grow
+	; to do this, we are going to skip the tail erase and reset our grow flag
+	ld a, 0
+	ld [SnakeShouldGrow], a		; write it to zero
+	jp move_snake_end		; and skip the tail shift
+
+move_snake_cut_tail:
+	; erase the old tail piece that we don't want anymore
+	LOAD_16_INTO_HL SnakeTail
+	ld a, [hl+]			; load x
+	ld d, a
+
+	ld a, [hl+]			; load y
+	ld e, a	
+
+	; we need to save the new snake tail pointer
+	WRITE_16_WITH_HL SnakeTail
+
+
+	call convert_xy_to_screen_addr	; convert hl to a memory address on the screen
+
+	ld a, 32			; ASCII blank space
+	ld bc, 1			; only set one byte
+	call mem_SetVRAM		; write it
+	
+	jp move_snake_end
+
+move_snake_die:
+	ld a, 2				; this is the game state for dead
+	ld [GameState], a		; write it
+
+move_snake_end:
+	ei				; turn interrupts back on
+	ret
+
+;--------------- 
+; joypad_interrupt
+;	handles the joypad interrupt
+;---------------
+joypad_interrupt:
+	push af
+
+	pop af
+	reti
 
 ;--------------- 
 ; timer_interrupt
@@ -270,16 +452,17 @@ draw_snake:
 
 	; this is where we draw SnakeLength-many tiles on the bg
 draw_snake_loop:
-	di
-	ld a, [hl+]			; get the first byte (this should be the x coord)
-	ld d, a				; put the x shift in e
-
-	ld a, [hl+]			; and the next should be the y coord
+	di				; we don't want a vblank occuring while we are doing this
+	ld a, [hl+]			; get the first byte (this should be the x coord) and put it in d
+	ld d, a
+	ld a, [hl+]			; and the next should be the y coord and it goes in e
 	ld e, a
 
 	; de have the x and y coords, let's get the pointer to the bg tile into hl
 	push hl				; save hl first
 	push bc				; and bc
+
+	; using: convert_xy_to_screen_addr (d->xCoord, e->yCoord): hl->pBgTile
 	call convert_xy_to_screen_addr	
 
 	; we are going to set the background tile to the block character now
@@ -327,7 +510,7 @@ convert_xy_to_screen_addr:
 
 	; now we add on the screen offset in memory
 	ld de, _SCRN0
-	add hl, de
+	add hl, de			; 16 bit add again
 
 	; hl now contains the address of our tile!
 	ret
@@ -365,8 +548,9 @@ splash_text:
 	db	"   Press A to play              "
 splash_text_end:
 
-gamestate_text:
-	db "gamestate: "
+gameover_text:
+	db	"Game over!"
+gameover_text_end:
 
 ;--------------- 
 ; stoplcd
