@@ -256,6 +256,24 @@ gameover:
 ;------------------------------------------------------------------------
 
 ;--------------- 
+; subtract_16bit
+;	implements hl = hl - de
+;---------------
+subtract_16bit:
+	scf			
+	ccf				; clear the carry flag
+
+	ld a, l				; grab the lower bit 
+	sub e				; and subtract from it
+	ld l, a				; save it back
+
+	ld a, h				; load the higher bit
+	sbc a, d			; subtract d plus any carry
+	ld h, a				; save it
+
+	ret
+
+;--------------- 
 ; timer_interrupt
 ;	handles the timer overflow interrupt
 ;---------------
@@ -444,7 +462,7 @@ move_snake_up:
 
 	ld a, e
 	cp 255				; if the register overflowed
-	jr z, move_snake_die		; snake is dead!
+	jp z, move_snake_die		; snake is dead!
 
 	jp move_snake_write		; otherwise write our new snake block
 
@@ -454,7 +472,7 @@ move_snake_right:
 
 	ld a, d				; put d into a so we can compare with it
 	cp 20				; is the coord 20 ?
-	jr z, move_snake_die		; if it is, snake is dead!
+	jp z, move_snake_die		; if it is, snake is dead!
 	
 	jp move_snake_write
 
@@ -464,7 +482,7 @@ move_snake_down:
 
 	ld a, e				; put e into a so we can compare
 	cp 18				; is the y coord 18
-	jr z, move_snake_die		; if it is, snake is dead!
+	jp z, move_snake_die		; if it is, snake is dead!
 
 	jp move_snake_write
 
@@ -478,6 +496,33 @@ move_snake_left:
 	jp move_snake_write
 
 move_snake_write:
+	; we need to test if hl is larger than SnakePiecesEnd
+	push hl
+	push de
+
+	ld de, SnakePiecesEnd
+	
+	
+	call subtract_16bit		; 16 bit subtract, hl = hl - bc
+					; larger hl means positive result
+	
+	pop de				; restore de
+	
+	; if we have an underflow (ie result is negative), the carry will be set
+	; if the carry is not set, then the result was positive and we need to fix the address (because our hl is out of bounds)
+	jr nc, move_snake_wrap_ptr
+	
+	pop hl
+	jp move_snake_continue
+
+move_snake_wrap_ptr:
+	pop hl				; needed for stack sync
+	ld hl, SnakePieces		; load in the start address of snake pieces to wrap the scan
+	
+move_snake_continue:
+
+	WRITE_16_WITH_HL SnakeHead
+
 	; d and e have been updated with our new values, so lets put them in memory
 	ld a, d
 	ld [hl+], a
@@ -487,9 +532,10 @@ move_snake_write:
 
 	; we have moved the head up two blocks, so we need to update the pointer
 	LOAD_16_INTO_HL SnakeHead
-	ld de, 2			; we need to use de so the cpu will handle the 16 bit add for us
-	add hl, de			; add two bytes on
-	WRITE_16_WITH_HL SnakeHead
+	;ld de, 2			; we need to use de so the cpu will handle the 16 bit add for us
+	;add hl, de			; add two bytes on
+	;WRITE_16_WITH_HL SnakeHead
+	;WRITE_16_TO_HL hl		; save the starting block
 
 	; now we need to test if the snake should grow
 	ld a, [SnakeShouldGrow]
@@ -505,6 +551,23 @@ move_snake_write:
 move_snake_cut_tail:
 	; erase the old tail piece that we don't want anymore
 	LOAD_16_INTO_HL SnakeTail
+	push hl				; save the pointer
+
+	; check if SnakeTail is out of bounds
+	ld de, SnakePiecesEnd
+	call subtract_16bit		; do the subtract
+
+	jr nc, move_snake_cut_tail_wrap_ptr ; if we are out of bounds
+
+	pop hl
+	jp move_snake_cut_tail_continue
+
+move_snake_cut_tail_wrap_ptr:
+	pop hl
+	ld hl, SnakePieces
+
+move_snake_cut_tail_continue:
+
 	ld a, [hl+]			; load x
 	ld d, a
 
@@ -513,7 +576,6 @@ move_snake_cut_tail:
 
 	; we need to save the new snake tail pointer
 	WRITE_16_WITH_HL SnakeTail
-
 
 	call convert_xy_to_screen_addr	; convert hl to a memory address on the screen
 
@@ -551,6 +613,25 @@ draw_snake:
 	; this is where we draw SnakeLength-many tiles on the bg
 draw_snake_loop:
 	di				; we don't want a vblank occuring while we are doing this
+
+	; if we reach the bound, we need to start hl again at the end
+	ld de, SnakePiecesEnd		; load in the address on the back end
+	push hl
+
+	call subtract_16bit		; 16 bit subtract
+
+	; if the carry flag is not set, the result is positive and hl is out of bounds
+	jr nc, draw_snake_wrap_ptr
+	
+	pop hl				; restore our old hl
+	jp draw_snake_continue		; if we get here, we don't need to correct anything
+
+draw_snake_wrap_ptr:
+	pop hl				; needed so that stack stays in sync
+	ld hl, SnakePieces		; load the address of the starting point into the block
+
+draw_snake_continue:
+
 	ld a, [hl+]			; get the first byte (this should be the x coord) and put it in d
 	ld d, a
 	ld a, [hl+]			; and the next should be the y coord and it goes in e

@@ -46,6 +46,30 @@ WRITE_16_WITH_ADD: MACRO
 ENDM
 
 ;--------------- 
+; WRITE_16_TO_HL (MACRO)
+;	writes a 16 bit number from \1 into the address pointed to by hl 
+;	\1 -> 16 bit number
+;---------------
+WRITE_16_TO_HL: MACRO
+	push af
+	push de
+	push hl
+	
+	ld de, \1	; load our number in
+	
+	ld a, e		; lower bit in a first so we can write it
+	ld [hl+], a	; write + inc
+
+	ld a, d		; now the higher bit
+	ld [hl], a	
+
+	pop hl
+	pop de
+	pop af
+	ret
+ENDM
+
+;--------------- 
 ; WRITE_16_WITH_HL (MACRO)
 ;	writes a 16 bit number from hl into \1 
 ;	\1 -> target address
