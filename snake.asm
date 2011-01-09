@@ -31,7 +31,7 @@ GameStateAscii:		ds 1		; the ascii version of GameState
 
 SnakeLength:		ds 1		; the length of the snake
 
-SnakePieces:		ds 2*30		; snake blocks; 2 bytes per piece (x and y coords), 30 pieces max
+SnakePieces:		ds 2*100	; snake blocks; 2 bytes per piece (x and y coords), 60 pieces max
 SnakePiecesEnd:
 
 SnakeHead:		ds 2		; snake head pointer
@@ -136,6 +136,12 @@ init_variables:
 	ld bc, variables_end-variables_start
 	call mem_Set
 
+	; we also need to write the SnakePieces to FFs
+	ld a, $FF
+	ld hl, SnakePieces
+	ld bc, SnakePiecesEnd-SnakePieces
+	call mem_Set
+
 ;------------------------------------------------------------------------
 
 ; this code displays the splash screen
@@ -222,6 +228,11 @@ init_snake:
 	; draw our initial snake
 	call draw_snake
 
+;;;;;;;;;;;;;;;;;; DEBUG (make the snake grow by default)
+	ld a, 10
+	ld [SnakeShouldGrow], a
+;;;;;;;;;;;;;;;;;; DEBUG
+
 ; finally, our main code loop!
 main:
 ;	halt				; sleep the cpu until an interrupt fires
@@ -254,6 +265,86 @@ gameover:
 ;	jr main
 
 ;------------------------------------------------------------------------
+
+;--------------- 
+; tail_collision_scan
+;	scan the array for any tail collisions 
+;---------------
+tail_collision_scan:
+	push hl
+	push bc
+	push de
+	; first, we grab the snake head data
+	LOAD_16_INTO_HL	SnakeHead	; load it
+
+	;ld bc, hl (can't do this, grr nintendo)
+	ld a, [hl+]
+	ld b, a
+
+	ld a, [hl+]
+	ld c, a				; save it so we can use hl
+
+	ld e, SnakePiecesEnd-SnakePieces-2 ; this is the max number of pieces
+	
+tail_collision_scan_loop:
+
+	; we need to test for array wrapping
+	push hl
+	push de
+	
+	ld de, SnakePiecesEnd		; we are going to compare hl
+	call subtract_16bit		; hl - de
+
+	jr nc, tail_collision_wrap_ptr
+
+	pop de
+	pop hl
+
+	jr tail_collision_skip_wrap
+
+tail_collision_wrap_ptr:
+	pop de
+	pop hl
+
+	ld hl, SnakePieces 
+
+tail_collision_skip_wrap:
+
+	ld a, [hl+]			; get the x coord
+
+	cp b				; is it the same as the current head x coord
+
+	jr nz, tail_collision_continue_loop	; they didn't match
+	jr z, tail_collision_check_y	; the x matched, check y
+
+tail_collision_continue_loop:
+	inc hl
+	jr tail_collision_dec
+
+tail_collision_check_y:
+	ld a, [hl+] 			; load in the y value
+	
+	cp c				; and is it the same
+	jr z, tail_collision_die	; uh oh, snake is dead
+	
+tail_collision_dec:
+	dec e				; decrement e
+	dec e				; do it twice because x and y take a byte each
+	ld a, e				; 
+	cp 0				; see if we are done
+	jr nz, tail_collision_scan_loop ; if we aren't, go back
+
+	jr tail_collision_end		; if we get here, there have been no collisions
+
+tail_collision_die:
+	ld a, 2
+	ld [GameState], a		; game over
+
+tail_collision_end:
+	pop de
+	pop bc
+	pop hl
+	ret
 
 ;--------------- 
 ; subtract_16bit
@@ -492,7 +583,7 @@ move_snake_left:
 	
 	ld a, d
 	cp 255				; did we get an overflow ?
-	jr z, move_snake_die		; we are off the screen, so die
+	jp z, move_snake_die		; we are off the screen, so die
 	jp move_snake_write
 
 move_snake_write:
@@ -532,10 +623,6 @@ move_snake_continue:
 
 	; we have moved the head up two blocks, so we need to update the pointer
 	LOAD_16_INTO_HL SnakeHead
-	;ld de, 2			; we need to use de so the cpu will handle the 16 bit add for us
-	;add hl, de			; add two bytes on
-	;WRITE_16_WITH_HL SnakeHead
-	;WRITE_16_TO_HL hl		; save the starting block
 
 	; now we need to test if the snake should grow
 	ld a, [SnakeShouldGrow]
@@ -544,9 +631,15 @@ move_snake_continue:
 
 	; if we get here, the snake needs to grow
 	; to do this, we are going to skip the tail erase and reset our grow flag
-	ld a, 0
+	dec a
 	ld [SnakeShouldGrow], a		; write it to zero
-	jp move_snake_end		; and skip the tail shift
+	ld a, [SnakeLength]		; load in the snake length
+	inc a				; crank it up
+	ld [SnakeLength], a		; and save
+
+	call tail_collision_scan	; scan for tail collision
+
+	jp move_snake_end		; skip the tail shift
 
 move_snake_cut_tail:
 	; erase the old tail piece that we don't want anymore
@@ -568,14 +661,25 @@ move_snake_cut_tail_wrap_ptr:
 
 move_snake_cut_tail_continue:
 
-	ld a, [hl+]			; load x
+	ld a, [hl]			; load x
 	ld d, a
+	ld a, $FF
+	ld [hl+], a			; erase (to fix the collision detect)
 
-	ld a, [hl+]			; load y
+	ld a, [hl]			; load y
 	ld e, a	
+	ld a, $FF
+	ld [hl+], a			; erase 
 
 	; we need to save the new snake tail pointer
 	WRITE_16_WITH_HL SnakeTail
+
+	call tail_collision_scan	; scan for tail collision
+
+
+	ld a, [GameState]
+	cp 2				; if GameState == 2
+	jr z, move_snake_end		; snake died
 
 	call convert_xy_to_screen_addr	; convert hl to a memory address on the screen
 
