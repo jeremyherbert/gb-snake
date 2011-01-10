@@ -4,53 +4,55 @@ Bank #0 (HOME):
   SECTION: $0050-$0052 ($0003 bytes)
   SECTION: $0058-$0058 ($0001 bytes)
   SECTION: $0060-$0060 ($0001 bytes)
-  SECTION: $0100-$0D36 ($0C37 bytes)
-           $0A89 = timer_interrupt
+  SECTION: $0100-$0D66 ($0C67 bytes)
+           $0AB9 = timer_interrupt
            $0952 = init
-           $0D1E = setup_dma
-           $0CFD = stoplcd
+           $0D4E = setup_dma
+           $0D2D = stoplcd
            $0150 = TileData
-           $0C61 = clear_bg
-           $0C73 = splash_text
-           $0CF3 = splash_text_end
-           $0C0E = draw_snake
-           $0AA4 = read_joypad
-           $0B23 = move_snake
-           $0A16 = main
-           $0B10 = draw_gameover
-           $0A80 = subtract_16bit
-           $0AA2 = timer_interrupt_end
-           $0ACB = read_joypad_up_return
-           $0ABD = read_joypad_right_return
-           $0AD2 = read_joypad_down_return
-           $0AC4 = read_joypad_left_return
-           $0CF3 = gameover_text
-           $0CFD = gameover_text_end
-           $0C07 = move_snake_die
-           $0B73 = move_snake_write
-           $0B86 = move_snake_continue
-           $0A3B = tail_collision_scan
-           $0C0C = move_snake_end
-           $0BD6 = move_snake_cut_tail_continue
-           $0C51 = convert_xy_to_screen_addr
-           $0C32 = draw_snake_continue
-           $0D0E = multiply_to_hl
-           $0D2B = dma_copy
-           $0D37 = dma_copy_end
+           $0C91 = clear_bg
+           $0CA3 = splash_text
+           $0D23 = splash_text_end
+           $0C3E = draw_snake
+           $0A47 = lfsr_generate
+           $0AD4 = read_joypad
+           $0B53 = move_snake
+           $0A1F = main
+           $0B40 = draw_gameover
+           $0AB0 = subtract_16bit
+           $0AD2 = timer_interrupt_end
+           $0AFB = read_joypad_up_return
+           $0AED = read_joypad_right_return
+           $0B02 = read_joypad_down_return
+           $0AF4 = read_joypad_left_return
+           $0D23 = gameover_text
+           $0D2D = gameover_text_end
+           $0C37 = move_snake_die
+           $0BA3 = move_snake_write
+           $0BB6 = move_snake_continue
+           $0A6B = tail_collision_scan
+           $0C3C = move_snake_end
+           $0C06 = move_snake_cut_tail_continue
+           $0C81 = convert_xy_to_screen_addr
+           $0C62 = draw_snake_continue
+           $0D3E = multiply_to_hl
+           $0D5B = dma_copy
+           $0D67 = dma_copy_end
   SECTION: $0061-$00B6 ($0056 bytes)
            $007B = mem_CopyMono
            $0061 = mem_Set
            $00A1 = mem_CopyVRAM
            $008B = mem_SetVRAM
            $006D = mem_Copy
-    SLACK: $336A bytes
+    SLACK: $333A bytes
 
 BSS:
-  SECTION: $C000-$C179 ($017A bytes)
+  SECTION: $C000-$C17A ($017B bytes)
            $C000 = variables_start
-           $C17A = variables_end
+           $C17B = variables_end
            $C0A3 = SnakePieces
            $C16B = SnakePiecesEnd
+           $C175 = LFSRSeed
            $C0A0 = GameState
            $C16D = SnakeTail
            $C16B = SnakeHead
@@ -60,7 +62,7 @@ BSS:
            $C174 = TimerTicks
            $C16F = SnakeDirection
            $C170 = SnakeNextDirection
-    SLACK: $1E86 bytes
+    SLACK: $1E85 bytes
 
 VRAM:
   EMPTY

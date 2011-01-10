@@ -47,6 +47,8 @@ NumberOfFoods:		ds 1		; number of food objects that exist (as sprites)
 
 TimerTicks:		ds 1		; count the number of ticks in the timer (to slow down the movement speed)
 
+LFSRSeed:		ds 1		; seed value for our lfsr
+
 DEBUG_BLANK_DONT_TOUCH: ds 5		; this gets allocated to zeroes, makes it easier to see our ram block in the debugger
 variables_end:
 
@@ -146,6 +148,11 @@ init_variables:
 
 ; this code displays the splash screen
 splash:
+	
+	; turn on the timer, we need to use its value for our LFSR seed
+	ld a, TACF_START | TACF_262KHZ		; make it super fast to stop people gaming it
+	ld [rTAC], a
+
 	; we are going to copy across the background tiles from the splash_text label
 	; using: mem_copyVRAM (hl->pSource, de->pDest, bc->byte count)
 	ld hl, splash_text
@@ -168,6 +175,10 @@ splash_wait_for_press:
 	and $01				; cut out all the bits except for the LSB (which contains the A button info)
 	cp 1
 	jr z, splash_wait_for_press	; if the a key has not been pressed, the instruction above will set the zero flag and we will jump back	
+
+	; save our LFSR seed
+	ld a, [rTIMA]			; counter value into a
+	ld [LFSRSeed], a		; save it!
 
 ;------------------------------------------------------------------------
 
@@ -218,15 +229,16 @@ init_snake:
 	ld a, 8				; piece 2, y
 	ld [hl+], a
 
+	; draw our initial snake
+	call draw_snake
+
 	; now we start the timer interrupts (ll. 828-852)
+	; start the timer, we need this for our LIFR
 	ld a, TACF_START | TACF_4KHZ	; turn on, set to 4khz (timer will interrupt every [255 * 1/4000] = 63.75ms)
 	ld [rTAC], a
 
 	ld a, IEF_VBLANK | IEF_TIMER | IEF_HILO	; enable vblank, timer, joypad interrupts
 	ld [rIE], a			; save the register
-	
-	; draw our initial snake
-	call draw_snake
 
 ;;;;;;;;;;;;;;;;;; DEBUG (make the snake grow by default)
 	ld a, 10
@@ -238,6 +250,8 @@ main:
 ;	halt				; sleep the cpu until an interrupt fires
 ;	nop				; a bug in the cpu means that the instruction after a halt might get skipped
 	ei
+
+	call lfsr_generate		; so we get nice random numbers
 
 	ld a, [GameState]
 	cp 2				; does GameState == 2? (the gameover state)
@@ -265,6 +279,47 @@ gameover:
 ;	jr main
 
 ;------------------------------------------------------------------------
+;--------------- 
+; lfsr_generate
+;	generate a random number and put it in LFSRSeed
+;	see http://en.wikipedia.org/wiki/Linear_feedback_shift_register for info on how this works
+;	uses taps at 8, 6, 5, 4 
+;---------------
+lfsr_generate:
+	ld a, [LFSRSeed]		; load up the seed
+	ld e, a				; e will store our seed value
+
+lfsr_generate_loop:
+	ld d, a
+
+	rr d				; roll four times
+	rr d
+	rr d
+	rr d
+	xor d				; xor it
+
+	rr d				; five rolls in total
+	xor d
+
+	rr d				; up to 6 rolls
+	xor d				; xor it in
+
+	rr d
+	rr d				; 8 rolls, this is our fourth and last tap
+	xor d
+	
+	; not really sure if secure crypto allows me to do this, but frankly if you would like to game my system then go for it
+	ld b, a
+	ld a, [rDIV]			; source of some more random
+	xor b				; add it in
+
+	cp e
+	jr z, lfsr_generate_loop	; make sure it is different
+
+	; save it
+	ld [LFSRSeed], a
+
+	ret
 
 ;--------------- 
 ; tail_collision_scan
